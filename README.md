@@ -4,7 +4,43 @@ A small networking project that exposes two Express backends through an HTTPS ng
 
 ## Network topology
 
-![Private Network Service Platform topology](docs/topology.png)
+```mermaid
+flowchart TD
+    subgraph LAN["Wi-Fi Hotspot LAN / Subnet (DHCP Assigned IPs)"]
+        subgraph MAC1["Mac 1 — Client (College-Managed MacBook)"]
+            direction TB
+            CLIENT_TOOLS["Client Applications\n• Browser (Safari / Chrome)\n• curl · dig · nslookup\n• Wireshark (capture on en0)\n• Trusts Team1 Local CA"]
+            CLIENT_DNS["DNS Resolver Setting:\nMac 2's Wi-Fi IP"]
+            CLIENT_NOTE["Managed firewall blocks incoming connections;\noutgoing traffic works"]
+        end
+
+        subgraph MAC2["Mac 2 — Server MacBook (DNS setting: 127.0.0.1)"]
+            direction TB
+            subgraph DNS_BOX["dnsmasq (UDP 53)"]
+                DNS_DESC["app.team1.test / api.team1.test ➔ Mac 2 IP\nTTL 30s · other names ➔ 8.8.8.8\nlistens on 127.0.0.1 + Wi-Fi IP"]
+            end
+
+            subgraph NGINX_BOX["nginx · Edge Reverse Proxy & Load Balancer"]
+                NGINX_DESC["TCP 443 · HTTPS (TLS 1.2 / 1.3)\nTLS terminates here · cert signed by Team1 Local CA\nTCP 80 · 301 redirect to HTTPS\nRound-robin · passive failover"]
+            end
+
+            subgraph BACKENDS["Internal Loopback Backends"]
+                direction LR
+                BACKEND_A["Backend A (Express)\n127.0.0.1:4000\n/ · /api/data"]
+                BACKEND_B["Backend B (Express)\n127.0.0.1:6000\n/ · /api/data"]
+            end
+        end
+    end
+
+    CLIENT_TOOLS -->|"1. DNS query (UDP 53)"| DNS_BOX
+    DNS_BOX -.->|"A record: Mac 2 IP"| CLIENT_TOOLS
+
+    CLIENT_TOOLS ==>|"2. TCP handshake (port 443)\n3. TLS handshake (cert verified)\n4. Encrypted HTTPS request"| NGINX_BOX
+    NGINX_BOX -.->|"6. Encrypted response\n('hello from backend A / B')"| CLIENT_TOOLS
+
+    NGINX_BOX -->|"5a. Plain HTTP (loopback)"| BACKEND_A
+    NGINX_BOX -->|"5b. Plain HTTP (loopback)"| BACKEND_B
+```
 
 The topology shows the intended two-Mac setup: one Mac is the client, while the other hosts dnsmasq, nginx, and both Express backends. Client traffic uses HTTPS to reach nginx. nginx sends plain HTTP over loopback to one of the backends.
 
@@ -92,4 +128,5 @@ These hostnames require the private DNS and trusted CA setup described above. Fo
 
 - [Architecture and request flow](docs/architecture.md)
 - [Topology diagram](docs/topology.png)
+- [Evidence index and refresh notes](evidence/README.md)
 - `evidence/phase-1/` contains screenshots covering LAN connectivity, DNS resolution, nginx, TLS, caching, and Wireshark observations.
