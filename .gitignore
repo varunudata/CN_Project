@@ -1,2 +1,4 @@
 backendA/node_modules
 backendB/node_modules
+certs/*-key.pem
+.DS_Store
